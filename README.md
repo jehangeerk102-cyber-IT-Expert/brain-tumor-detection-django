@@ -11,7 +11,7 @@ Place your application screenshot at:
 ```
 brain-tumor-detection-django/brainscan-preview.png
 ```
-
+ 
 Then this image will appear in the GitHub README:
 
 [![BrainScan AI frontend preview](brainscan-preview.png)](brainscan-preview.png)
