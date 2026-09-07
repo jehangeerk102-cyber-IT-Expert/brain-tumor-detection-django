@@ -14,7 +14,8 @@ TUMAR DETECTION1/TUMAR DETECTION1/brain-pic-colab.PNG
  
 Then this image will appear in the GitHub README:
 
-[![BrainScan AI frontend preview](brain-pic-colab.PNG)](brain-pic-colab.PNG)
+<img width="1676" height="692" alt="image" src="https://github.com/user-attachments/assets/695b00d8-a75a-410e-b16b-f87281e890aa" />
+
 
 
 If the screenshot is not available yet, create an `assets` folder and add it later. The application itself does not require the screenshot to run.
