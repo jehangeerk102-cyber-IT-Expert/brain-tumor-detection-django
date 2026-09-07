@@ -14,7 +14,8 @@ assets/brainscan-preview.png
 
 Then this image will appear in the GitHub README:
 
-![BrainScan AI frontend preview](assets/brainscan-preview.png)
+![BrainScan AI frontend preview](brain-tumor-detection-django
+/brainscan-preview.png)
 
 If the screenshot is not available yet, create an `assets` folder and add it later. The application itself does not require the screenshot to run.
 
