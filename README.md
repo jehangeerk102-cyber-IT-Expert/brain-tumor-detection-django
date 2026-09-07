@@ -9,7 +9,8 @@ A Django-based brain-tumor classification application using a trained TensorFlow
 Place your application screenshot at:
 
 ```
-assets/brainscan-preview.png
+brain-tumor-detection-django
+/brainscan-preview.png
 ```
 
 Then this image will appear in the GitHub README:
