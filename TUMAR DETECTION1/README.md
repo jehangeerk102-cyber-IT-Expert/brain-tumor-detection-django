@@ -9,12 +9,12 @@ A Django-based brain-tumor classification application using a trained TensorFlow
 Place your application screenshot at:
 
 ```
-brain-tumor-detection-django/TUMAR DETECTION1/brain pic colab.PNG
+brain-tumor-detection-django/TUMAR DETECTION1/brain-pic-colab.PNG
 ```
  
 Then this image will appear in the GitHub README:
 
-[![BrainScan AI frontend preview](brain pic colab.PNG)](brain pic colab.PNG)
+[![BrainScan AI frontend preview](brain-pic-colab.PNG)](brain-pic-colab.PNG)
 
 If the screenshot is not available yet, create an `assets` folder and add it later. The application itself does not require the screenshot to run.
 
