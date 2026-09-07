@@ -1,223 +1,256 @@
-# Brain Tumor Detection API: Django + TensorFlow + LangChain
+# Brain Tumor Detection — Django + TensorFlow
 
-Yeh project aapke Google Colab notebook ko production-style Django REST API mein convert karta hai. **TensorFlow/VGG16 image classifier prediction karta hai; LangChain optional explanation layer hai.** LangChain image classifier ka replacement nahi hai. Agar `LANGCHAIN_ANALYSIS_ENABLED=False` rahe, API deterministic fallback explanation return karegi aur OpenAI key ki zaroorat nahi hogi.
+A Django-based brain-tumor classification application using a trained TensorFlow/VGG16 model. The project includes a browser frontend for image upload, REST API endpoints, model-status checking, optional LangChain explanation support, and local split-RAR model handling.
 
-> **Medical disclaimer:** Yeh project educational/technical demo hai, medical diagnosis device nahi. Kisi bhi result par qualified radiologist ya doctor se original scan review karwana zaroori hai.
+> **Medical disclaimer:** This project is an educational and research demonstration. It is not a medical diagnostic device. Clinical decisions must always be made by a qualified radiologist or healthcare professional.
 
-## 1. Directory structure
+## Project preview
 
-```text
+Place your application screenshot at:
+
+```
+brain-tumor-detection-django/brainscan-preview.png
+```
+ 
+Then this image will appear in the GitHub README:
+
+[![BrainScan AI frontend preview](brainscan-preview.png)](brainscan-preview.png)
+
+If the screenshot is not available yet, create an `assets` folder and add it later. The application itself does not require the screenshot to run.
+
+## Features
+
+The application provides a Django web interface where users can upload a brain-scan image and receive a predicted class, confidence score, class probabilities, and a safety-focused explanation. The backend exposes REST endpoints for prediction and model status, while the frontend is served directly by Django without requiring a separate React or Node.js server.
+
+| Feature | Description |
+| --- | --- |
+| Image upload | Upload a JPG, JPEG, or PNG brain image from the browser. |
+| Prediction | Classifies the image into `notumor`, `glioma`, `meningioma`, or `pituitary`. |
+| Confidence | Returns the highest class probability. |
+| REST API | Provides prediction and model-status endpoints. |
+| Model support | Supports direct `model.h5` or two-part local RAR archives. |
+| Frontend | Django template-based upload page with preview and result display. |
+| Safety | Includes an educational-use and clinical disclaimer. |
+
+## Model classes
+
+The application expects the same label order used by the supplied Colab notebook:
+
+```python
+["notumor", "glioma", "meningioma", "pituitary"]
+```
+
+The model uses 128×128 RGB input images, matching the notebook preprocessing configuration.
+
+## Directory structure
+
+```
 brain_tumor_api/
+├── manage.py
+├── requirements.txt
+├── README.md
 ├── .env.example
 ├── .gitignore
-├── requirements.txt
-├── manage.py
-├── README.md
 ├── config/
-│   ├── __init__.py
 │   ├── settings.py
 │   ├── urls.py
 │   ├── asgi.py
 │   └── wsgi.py
 ├── detector/
-│   ├── __init__.py
 │   ├── apps.py
 │   ├── urls.py
 │   ├── views.py
-│   └── services/
-│       ├── __init__.py
-│       ├── predictor.py
-│       └── chain.py
+│   ├── services/
+│   │   ├── predictor.py
+│   │   ├── model_fetcher.py
+│   │   └── chain.py
+│   └── templates/
+│       └── detector/
+│           └── index.html
 ├── models/
-│   └── brain_tumor_vgg16.keras
+│   ├── model.h5                 # optional; do not commit to GitHub
+│   ├── model.part1.rar          # optional split archive part 1
+│   └── model.part2.rar          # optional split archive part 2
+├── assets/
+│   └── brainscan-preview.png    # optional README screenshot
 ├── media/
-├── scripts/
-│   └── train_model.py
-└── db.sqlite3
+└── scripts/
+    └── train_model.py
 ```
 
-## 2. Environment setup
+## Model placement
+
+Use **one** of the following options.
+
+### Option A: direct model file
+
+Place the trained model here:
+
+```
+models/model.h5
+```
+
+### Option B: split RAR model
+
+Place both archive parts here:
+
+```
+models/model.part1.rar
+models/model.part2.rar
+```
+
+Do not rename the files unless you also update the configuration. Both parts must remain in the same directory. The application uses 7-Zip to extract the archive when the model is first required.
+
+Large model files and private data should not be committed to GitHub. Keep them locally or use private object storage.
+
+## Installation on Windows
+
+Open PowerShell inside the project folder:
+
+```
+cd "C:\path\to\brain_tumor_api"
+py -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+Copy-Item .env.example .env
+.\.venv\Scripts\python.exe manage.py migrate
+.\.venv\Scripts\python.exe manage.py runserver 127.0.0.1:8000
+```
+
+If you are using split RAR files, install [7-Zip](https://www.7-zip.org/) and make sure `7z.exe` is available in PATH.
+
+## Installation on Linux
 
 ```bash
-cd /home/ubuntu/brain_tumor_api
+cd /path/to/brain_tumor_api
 python3 -m venv .venv
 source .venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 cp .env.example .env
+sudo apt-get update
+sudo apt-get install -y p7zip-full
 python manage.py migrate
-```
-
-`requirements.txt` mein TensorFlow ka CPU/GPU package apne machine ke hisaab se select karein. Production mein `DJANGO_SECRET_KEY`, `DJANGO_DEBUG=False`, aur `DJANGO_ALLOWED_HOSTS` zaroor set karein.
-
-## 3. Model train/export karein
-
-Dataset ka layout is tarah hona chahiye. Folder names `.env` ke `CLASS_LABELS` order se match hone chahiye.
-
-```text
-brain_tumer_dataset/
-├── Training/
-│   ├── notumor/
-│   ├── glioma/
-│   ├── meningioma/
-│   └── pituitary/
-└── Testing/
-    ├── notumor/
-    ├── glioma/
-    ├── meningioma/
-    └── pituitary/
-```
-
-Aapke actual Colab dataset paths yeh hain:
-
-```python
-train_dir = '/content/drive/MyDrive/Brain_tumar_detection/brain_tumer_dataset/Training'
-test_dir = '/content/drive/MyDrive/Brain_tumar_detection/brain_tumer_dataset/Testing'
-```
-
-Agar training Colab mein dobara karni ho, to `scripts/train_model.py` upload karke yeh command chala sakte hain:
-
-```bash
-python scripts/train_model.py \\
-  --train-dir /content/drive/MyDrive/Brain_tumar_detection/brain_tumer_dataset/Training \\
-  --test-dir /content/drive/MyDrive/Brain_tumar_detection/brain_tumer_dataset/Testing \\
-  --output /content/drive/MyDrive/Brain_tumar_detection/model.keras \\
-  --epochs 6 \\
-  --batch-size 20
-```
-
-Aapke existing model ka exact Colab path hai:
-
-```text
-/content/drive/MyDrive/Brain_tumar_detection/model.h5
-```
-
-Existing model ke liye dobara training ki zaroorat nahi. Colab mein yeh cell chala kar file download karein:
-
-```python
-from google.colab import files
-files.download('/content/drive/MyDrive/Brain_tumar_detection/model.h5')
-```
-
-Downloaded `model.h5` ko local project ke is exact path par rakhein:
-
-```text
-brain_tumor_api/models/model.h5
-```
-
-Local `.env` mein yeh values set honi chahiye:
-
-```dotenv
-MODEL_PATH=models/model.h5
-CLASS_LABELS=notumor,glioma,meningioma,pituitary
-```
-
-Colab ka `/content/drive/...` path local Windows/Linux Django server mein directly work nahi karega; model ko download karke `models/` folder mein copy karna compulsory hai.
-
-## 4. Server start karein
-
-```bash
 python manage.py runserver 127.0.0.1:8000
 ```
 
-Health check: `GET http://127.0.0.1:8000/health/`.
+## Browser frontend
 
-Model status: `GET http://127.0.0.1:8000/api/model-status/`.
+Open the following URL after starting Django:
 
-## 5. Prediction API
+```
+http://127.0.0.1:8000/
+```
 
-Endpoint: `POST /api/predict/`. Request `multipart/form-data` honi chahiye aur field ka naam `image` hona chahiye.
+Upload a supported brain image, select **Analyze image**, and wait for the prediction response. The frontend is located at:
+
+```
+detector/templates/detector/index.html
+```
+
+## API endpoints
+
+### Health check
+
+```
+GET /health/
+```
+
+### Model status
+
+```
+GET /api/model-status/
+```
+
+### Prediction
+
+```
+POST /api/predict/
+Content-Type: multipart/form-data
+```
+
+The upload field must be named `image`.
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/predict/ \
-  -F "image=@/path/to/scan.jpg"
+  -F "image=@/path/to/brain_scan.jpg"
 ```
 
-Example response:
+A typical response contains the predicted result, confidence, class probabilities, and explanation. Exact response fields depend on the current view implementation.
 
-```json
-{
-  "class_index": 1,
-  "class_label": "glioma",
-  "result": "Tumor: glioma",
-  "confidence": 0.934512,
-  "probabilities": {
-    "notumor": 0.012,
-    "glioma": 0.934512,
-    "meningioma": 0.031,
-    "pituitary": 0.022488
-  },
-  "image_size": {"width": 128, "height": 128},
-  "explanation": {
-    "summary": "AI prediction: Tumor: glioma with 93.45% confidence. This is not a medical diagnosis...",
-    "provider": "fallback"
-  }
-}
+## Adding images to the Django frontend
+
+For a frontend screenshot or static visual asset, create this directory:
+
+```
+assets/
 ```
 
-Possible HTTP responses are `200` for a prediction, `400` for invalid image/input, `413`-style validation behavior for oversized uploads depending on the server layer, and `503` when the model file is missing.
+For an image displayed inside a Django template, use the static-files directory instead:
 
-## 6. LangChain explanation enable karna
-
-`.env` mein yeh values set karein:
-
-```dotenv
-LANGCHAIN_ANALYSIS_ENABLED=True
-OPENAI_API_KEY=your-key
-OPENAI_MODEL=gpt-4o-mini
+```
+static/images/brain-scan-example.png
 ```
 
-Server restart ke baad `explanation.provider` `langchain-openai` aa sakta hai. API key ko source code mein hard-code na karein. Explanation sirf model ke already-generated class/confidence ko safe language mein summarize karti hai; prediction ko change nahi karti.
+In the template, load static files at the top:
 
-## 7. Notebook se important corrections
-
-Aapke original notebook mein `ImageEnhance.Brightness(...).enhance(...)` aur contrast ka returned image assign nahi kiya gaya tha, isliye augmentation effective nahi thi. Inference mein model ko RGB image ka consistent preprocessing chahiye. Is project ke training script mein augmentation layers aur VGG16 preprocessing model graph ke andar rakhe gaye hain, jabki API raw RGB pixels ko `[0, 255]` range mein resize karke model ko deti hai. Isse training aur serving behavior consistent rehta hai.
-
-`Flatten()` ke badle `GlobalAveragePooling2D()` use kiya gaya hai, jisse classifier head chhota aur comparatively less overfit-prone hota hai. Agar aap exact original `.h5` model use kar rahe hain, to output classes aur `CLASS_LABELS` ka order bilkul same rakhein.
-
-## 8. Production checklist
-
-Development server ki jagah Gunicorn use karein:
-
-```bash
-gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2
+```
+{% load static %}
 ```
 
-Production deployment mein HTTPS, reverse proxy, upload-size limits, authentication/rate limiting, structured logging, model versioning, audit controls, and clinical validation add karein. Patient-identifiable images ko unnecessary persist na karein; current endpoint image ko disk par save nahi karta.
+Then reference the image:
 
-## 9. API ko frontend se call karna
-
-```javascript
-const form = new FormData();
-form.append("image", fileInput.files[0]);
-const response = await fetch("http://127.0.0.1:8000/api/predict/", {
-  method: "POST",
-  body: form,
-});
-const data = await response.json();
-console.log(data.result, data.confidence);
+```html
+<img src="{% static 'images/brain-scan-example.png' %}"
+     alt="Brain scan example"
+     width="640">
 ```
 
-## 10. Files ka purpose
+For user-uploaded prediction images, use the existing `media/` configuration rather than placing uploads inside `static/`.
 
-| File | Purpose |
-|---|---|
-| `detector/services/predictor.py` | Model loading, image validation, resize, and prediction |
-| `detector/services/chain.py` | Optional LangChain explanation chain |
-| `detector/views.py` | REST input validation and HTTP responses |
-| `scripts/train_model.py` | Reproducible training and evaluation |
-| `config/settings.py` | Environment-based application configuration |
+## Colab training paths
 
+The original notebook used these Google Drive paths:
 
-## 11. One-command setup
-
-Linux/Ubuntu par ZIP extract karne ke baad:
-
-```bash
-cd brain_tumor_api
-chmod +x setup.sh
-./setup.sh
+```python
+train_dir = "/content/drive/MyDrive/Brain_tumar_detection/brain_tumer_dataset/Training"
+test_dir = "/content/drive/MyDrive/Brain_tumar_detection/brain_tumer_dataset/Testing"
 ```
 
-Windows par `setup_windows.bat` par double-click karein. Dono scripts dependencies, `.env`, database migrations, aur folders automatically prepare karte hain. **Sirf `models/model.h5` manually copy karna hoga**, kyunki yeh aapki private Google Drive file hai.
+Those paths work inside Google Colab after mounting Google Drive. They do not work directly on a local Windows or Linux machine. If the model is already trained, copy only the resulting model file or its split archive parts into the local `models/` directory.
 
+## GitHub security checklist
+
+Keep the repository private if it contains proprietary code. Do not commit `.env`, API keys, private medical images, `model.h5`, RAR archives, virtual environments, or generated databases. The `.gitignore` should include:
+
+```
+.venv/
+__pycache__/
+*.py[cod]
+.env
+.env.*
+!.env.example
+db.sqlite3
+media/
+models/*.h5
+models/*.rar
+staticfiles/
+```
+
+## GitHub commit message
+
+For the first upload, use:
+
+```
+Add Django brain tumor detection app and README
+```
+
+Optional description:
+
+```
+Added the Django REST API, TensorFlow VGG16 prediction service, browser image-upload frontend, local model configuration, split-RAR support, setup instructions, and project documentation.
+```
+
+## License
+
+Add a license only if you have decided how other people may use, modify, and distribute the code. For a private personal project, leaving the license unset is acceptable until that decision is made.
